@@ -1,4 +1,4 @@
-# image_metadata_editor
+# keyw: image metadata editor
 Image metadata editor which allow to gather, sort and update image with appropriate metadata.
 
 This app is intended to be used by mictostocks content contributors. Microstocks have restrictions (image's number of keywords etc.) which is not easy to manage using your bare hands. The application can help you with the task.
