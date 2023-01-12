@@ -1,7 +1,7 @@
 """ modified TextCtrl class.
-Provides spellchecking while typing functionality"""
+Provides spellcheck while type functionality"""
 
-__version__ = '10.01.2023'
+__version__ = '12.01.2023'
 __author__ = 'Serhiy Kobyakov'
 
 
@@ -34,12 +34,12 @@ class KeywTextCtrl(wx.TextCtrl):
             self.SetWindowStyle(wx.TE_MULTILINE | wx.TE_WORDWRAP)
 
         self.SetDropTarget(MyTarget(self))
-        self.Bind(wx.EVT_TEXT, lambda event: self.do_spellcheck_while_type(event))
-        self.Bind(wx.EVT_CHAR, lambda event: self.filter_keys_while_type(event))
+        self.Bind(wx.EVT_TEXT, lambda event: self.__do_spellcheck_while_type(event))
+        self.Bind(wx.EVT_CHAR, lambda event: self.__filter_keys_while_type(event))
 
         self.the_dict = enchant.Dict("en_US")
 
-    def filter_keys_while_type(self, event):
+    def __filter_keys_while_type(self, event):
         # filter out characters which are not allowed in the keywords
         # or not used in cursor positioning
         key_code = event.GetKeyCode()
@@ -53,12 +53,13 @@ class KeywTextCtrl(wx.TextCtrl):
         elif key_code == 44 and self.allow_comma:
             # comma
             event.Skip()
-        elif 314 <= key_code <= 317:
-            # left and right, up and down arrows
+        elif 312 <= key_code <= 317:
+            # home and end; left, right, up and down arrows
             event.Skip()
         elif key_code == 13:
-            # Enter
-            self.on_enter()
+            # on Enter: format text line
+            self.format_text()
+            self.spell_check()
             # event.Skip() <- comment it to avoid GTK problems
         elif self.valid_char(key_code):
             self.need_spell_check_while_type = True
@@ -67,29 +68,45 @@ class KeywTextCtrl(wx.TextCtrl):
             # block out everything else
             pass
 
-    def on_enter(self):
-        if self.Name == 'search_edit':
-            pass
-            # print("GO Search!!!")
-            # evt = Search_keyw_DB(id=wx.ID_ANY)
-            # wx.PostEvent(evt)
-
-    def valid_char(self, key_code: int) -> bool:
+    @staticmethod
+    def valid_char(key_code: int) -> bool:
         # function returns True if the key_code is a valid character code
         return chr(key_code) in ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-    def do_spellcheck_while_type(self, event):
-        # do spellcheck while type if necessary
+    def __do_spellcheck_while_type(self, event):
+        """do spellcheck while type if necessary"""
         if len(self.GetLineText(0)) == self.GetInsertionPoint() and self.need_spell_check_while_type:
             last_word = self.GetLineText(0).split(' ')[-1]
             if len(last_word) > 1:
                 the_end = len(self.GetLineText(0))
                 the_start = len(self.GetLineText(0)) - len(last_word)
-                # print('  text range in the line:', the_start, the_end)
                 if self.the_dict.check(last_word):
                     self.SetStyle(the_start, the_start + 1, self.GetDefaultStyle())
                     self.SetStyle(the_start, the_end, wx.TextAttr(wx.BLACK))
                 else:
                     self.SetStyle(the_start, the_end, wx.TextAttr(wx.RED))
-                print("spellcheck:", last_word, self.the_dict.check(last_word))
+                # print("spellcheck:", last_word, self.the_dict.check(last_word))
             self.need_spell_check_while_type = False
+
+    def format_text(self):
+        """remove unnecessary spaces"""
+        if len(self.GetLineText(0)) > 0:
+            the_line = self.GetLineText(0)
+            self.Clear()
+            self.AppendText(the_line.replace('  ', ' ').replace('  ', ' ').strip())
+
+    def spell_check(self):
+        """show misspelled words in red"""
+        if len(self.GetLineText(0)) > 0:
+            the_line = self.GetLineText(0)
+            words = the_line.split(' ')
+            for word in words:
+                the_start = the_line.find(word)
+                the_end = the_start + len(word)
+                if self.the_dict.check(word):
+                    self.SetStyle(the_start, the_start + 1, self.GetDefaultStyle())
+                    self.SetStyle(the_start, the_end, wx.TextAttr(wx.BLACK))
+                else:
+                    self.SetStyle(the_start, the_end, wx.TextAttr(wx.RED))
+
+
