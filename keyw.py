@@ -9,7 +9,7 @@ from KeywTextCtrl import KeywTextCtrl
 from keyw_db import KeywDB
 
 
-__version__ = '11.01.2023'
+__version__ = '12.01.2023'
 __author__ = 'Serhiy Kobyakov'
 
 
@@ -249,8 +249,8 @@ class MetadataPanel(wx.Panel):
         td_panel = TitleDescrPanel(self)
         keyw_panel = KeywPanel(self)
         browse_panel = BrowsePanel(self)
-        the_button = wx.Button(self, id=wx.ID_ANY, label="Send data to DB and open next image")
-        the_button.Bind(wx.EVT_BUTTON, self.do_save_data_open_next)
+        the_button = wx.Button(self, id=wx.ID_ANY, label="Save metadata and open next image")
+        the_button.Bind(wx.EVT_BUTTON, self.do_save_metadata_open_next)
 
         metadata_sizer = wx.BoxSizer(wx.VERTICAL)
         metadata_sizer.Add(image_panel, 0, wx.ALL | wx.EXPAND, BORDER_IN)
@@ -268,7 +268,7 @@ class MetadataPanel(wx.Panel):
         # set the size of the window
         self.SetSizerAndFit(main_sizer)
 
-    def do_save_data_open_next(self, event):
+    def do_save_metadata_open_next(self, event):
         the_listbox = wx.FindWindowById(FILES_LIST)
         if the_listbox.GetSelection() > -1:
             kd.save_data()
