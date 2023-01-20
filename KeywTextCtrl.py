@@ -1,12 +1,16 @@
 """ modified TextCtrl class.
 Provides spellcheck while type functionality"""
 
-__version__ = '12.01.2023'
+__version__ = '15.01.2023'
 __author__ = 'Serhiy Kobyakov'
+__license__ = "MIT"
 
 
 import wx
+import wx.lib.newevent
 import enchant
+
+DataReadyEvent, EVT_KEYW_DATA_READY = wx.lib.newevent.NewCommandEvent()
 
 
 
@@ -34,8 +38,8 @@ class KeywTextCtrl(wx.TextCtrl):
             self.SetWindowStyle(wx.TE_MULTILINE | wx.TE_WORDWRAP)
 
         self.SetDropTarget(MyTarget(self))
-        self.Bind(wx.EVT_TEXT, lambda event: self.__do_spellcheck_while_type(event))
-        self.Bind(wx.EVT_CHAR, lambda event: self.__filter_keys_while_type(event))
+        self.Bind(wx.EVT_TEXT, self.__do_spellcheck_while_type)
+        self.Bind(wx.EVT_CHAR, self.__filter_keys_while_type)
 
         self.the_dict = enchant.Dict("en_US")
 
@@ -58,6 +62,8 @@ class KeywTextCtrl(wx.TextCtrl):
             event.Skip()
         elif key_code == 13:
             # on Enter: format text line
+            event = DataReadyEvent(self.GetId())
+            self.GetEventHandler().ProcessEvent(event)
             self.format_text()
             self.spell_check()
             # event.Skip() <- comment it to avoid GTK problems
@@ -71,7 +77,7 @@ class KeywTextCtrl(wx.TextCtrl):
     @staticmethod
     def valid_char(key_code: int) -> bool:
         # function returns True if the key_code is a valid character code
-        return chr(key_code) in ' abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        return chr(key_code) in " -abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'"
 
     def __do_spellcheck_while_type(self, event):
         """do spellcheck while type if necessary"""
@@ -91,9 +97,10 @@ class KeywTextCtrl(wx.TextCtrl):
     def format_text(self):
         """remove unnecessary spaces"""
         if len(self.GetLineText(0)) > 0:
-            the_line = self.GetLineText(0)
+            the_line = self.GetLineText(0).replace('  ', ' ').replace('  ', ' ').strip()
+            keywords = list(dict.fromkeys(the_line.split(' ')))
             self.Clear()
-            self.AppendText(the_line.replace('  ', ' ').replace('  ', ' ').strip())
+            self.AppendText(' '.join(keywords))
 
     def spell_check(self):
         """show misspelled words in red"""
