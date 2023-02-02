@@ -1,7 +1,7 @@
 """ modified TextCtrl class.
 Provides spellcheck while type functionality"""
 
-__version__ = '15.01.2023'
+__version__ = '02.02.2023'
 __author__ = 'Serhiy Kobyakov'
 __license__ = "MIT"
 
@@ -99,8 +99,10 @@ class KeywTextCtrl(wx.TextCtrl):
         if len(self.GetLineText(0)) > 0:
             the_line = self.GetLineText(0).replace('  ', ' ').replace('  ', ' ').strip()
             keywords = list(dict.fromkeys(the_line.split(' ')))
-            self.Clear()
-            self.AppendText(' '.join(keywords))
+            new_line = ' '.join(keywords)
+            if len(the_line) != len(new_line):
+                self.Clear()
+                self.AppendText(new_line)
 
     def spell_check(self):
         """show misspelled words in red"""
@@ -116,4 +118,12 @@ class KeywTextCtrl(wx.TextCtrl):
                 else:
                     self.SetStyle(the_start, the_end, wx.TextAttr(wx.RED))
 
+    def append_words(self, the_line: str):
+        """append new line with keywords into the text field"""
+        if len(self.GetLineText(0)) > 0:
+            self.AppendText(' ' + the_line.strip())
+        else:
+            self.AppendText(the_line.strip())
 
+    def list_of_words(self) -> list:
+        return self.GetLineText(0).split(" ")

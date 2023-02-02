@@ -1,17 +1,18 @@
 """ keyw frame module """
 
+__version__ = '02.02.2023'
+__author__ = 'Serhiy Kobyakov'
+__license__ = "MIT"
+
+
 import io
 import os
 import glob
 import configparser
 import wx
 from KeywTextCtrl import KeywTextCtrl
+from KeywTextCtrl import EVT_KEYW_DATA_READY
 from keyw_db import KeywDB
-
-
-__version__ = '12.01.2023'
-__author__ = 'Serhiy Kobyakov'
-
 
 APP_DIR = ""
 WORKING_DIR = ""
@@ -43,6 +44,7 @@ LOCATION_EDIT = 18
 COMPOSITION_EDIT = 19
 WWWWW_EDIT = 20
 THE_REST_EDIT = 21
+STATUS_LABEL = 22
 
 DB_SEARCH_EDIT = 30
 DB_SEARCH_RESULTS = 31
@@ -232,7 +234,7 @@ class KeywPanel(wx.Panel):
 
         the_rest_label = wx.StaticText(self, label='The rest of words:', style=wx.ALIGN_RIGHT)
         the_rest_edit = KeywTextCtrl(self, THE_REST_EDIT, wrap=True)
-        the_rest_edit.SetMinSize((FNAME_STR_LENGTH * 4, 3 * TEXT_HEIGHT))
+        the_rest_edit.SetMinSize((FNAME_STR_LENGTH * 4, 4 * TEXT_HEIGHT))
         keyw_edit_sizer.Add(the_rest_label, 1, wx.EXPAND)
         keyw_edit_sizer.Add(the_rest_edit, 1, wx.EXPAND)
 
@@ -249,14 +251,26 @@ class MetadataPanel(wx.Panel):
         td_panel = TitleDescrPanel(self)
         keyw_panel = KeywPanel(self)
         browse_panel = BrowsePanel(self)
+
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        tmp_button = wx.Button(self, id=wx.ID_ANY, label="tmp: count words")
+        # tmp_button.Bind(wx.EVT_BUTTON, self.upd_status)
+
+        the_status_label = wx.StaticText(self, id=STATUS_LABEL, label='keywords: ___  ', style=wx.ALIGN_RIGHT)
+        font = wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD)
+        the_status_label.SetFont(font)
         the_button = wx.Button(self, id=wx.ID_ANY, label="Save metadata and open next image")
         the_button.Bind(wx.EVT_BUTTON, self.do_save_metadata_open_next)
+        button_sizer.Add(tmp_button, 0, wx.ALL, BORDER_IN)
+        button_sizer.Add(the_status_label, 0, wx.ALIGN_CENTER_VERTICAL, BORDER_IN)
+        button_sizer.Add(the_button, 0, wx.ALL, BORDER_IN)
 
         metadata_sizer = wx.BoxSizer(wx.VERTICAL)
         metadata_sizer.Add(image_panel, 0, wx.ALL | wx.EXPAND, BORDER_IN)
         metadata_sizer.Add(td_panel, 0, wx.ALL | wx.EXPAND, BORDER_IN)
         metadata_sizer.Add(keyw_panel, 0, wx.ALL, BORDER_IN)
-        metadata_sizer.Add(the_button, 0, wx.ALL | wx.ALIGN_RIGHT, BORDER_IN)
+        metadata_sizer.Add(button_sizer, 0, wx.ALL | wx.ALIGN_RIGHT, BORDER_IN)
         metadata_sizer.Layout()
 
         # main sizer - to bring altogether
@@ -267,6 +281,11 @@ class MetadataPanel(wx.Panel):
 
         # set the size of the window
         self.SetSizerAndFit(main_sizer)
+
+        self.Bind(EVT_KEYW_DATA_READY, self.upd_status)
+
+    def upd_status(self, event):
+        kd.update_status()
 
     def do_save_metadata_open_next(self, event):
         the_listbox = wx.FindWindowById(FILES_LIST)
@@ -284,7 +303,8 @@ class DatabasePanel(wx.Panel):
         db_search_edit = wx.TextCtrl(self, DB_SEARCH_EDIT, style=wx.TE_PROCESS_ENTER | wx.TE_MULTILINE)
         db_search_edit.SetMinSize((FNAME_STR_LENGTH * 4, TEXT_HEIGHT))
         db_search_edit.Bind(wx.EVT_TEXT_ENTER, self.search_DB_for_keywords)
-        thumbnails_ctrl = wx.ListCtrl(self, DB_SEARCH_RESULTS, style=wx.LC_ICON)
+        # thumbnails_ctrl = wx.ListCtrl(self, DB_SEARCH_RESULTS, style=wx.LC_ICON)
+        thumbnails_ctrl = wx.ListCtrl(self, DB_SEARCH_RESULTS, style=wx.LC_ICON | wx.LC_AUTOARRANGE)
         the_button = wx.Button(self, id=wx.ID_ANY, label="Populate the metadata fields")
         the_button.Bind(wx.EVT_BUTTON, self.on_button)
 
@@ -402,6 +422,8 @@ class KeywDispatcher:
     search_DB = None
     search_results = None
     main_notebook = None
+    status_label = None
+    keyw_edits = None
 
     def __init__(self):
         self.the_frame = wx.FindWindowById(KEYW_FRAME)
@@ -432,6 +454,35 @@ class KeywDispatcher:
         self.image_list = wx.ImageList(256, 256, mask=True)
         self.search_results.AssignImageList(self.image_list, wx.IMAGE_LIST_NORMAL)
         self.main_notebook = wx.FindWindowById(MAIN_NOTEBOOK)
+        self.status_label = wx.FindWindowById(STATUS_LABEL)
+
+        self.keyw_edits = [self.concept, self.news, self.actions, self.emotions, self.model_spec, self.objects,
+                           self.image_spec, self.location, self.composition, self.wwwww, self.the_rest]
+
+
+    def __image_from_file(self, fname: str) -> wx.Image:
+        """returns resized wx.Image from jpg file"""
+        data = open(fname, "rb").read()
+        the_image = wx.Image(io.BytesIO(data))
+        the_w = the_image.GetWidth()
+        the_h = the_image.GetHeight()
+        # print(f"size: {the_w}x{the_h}")
+        if the_w > the_h:
+            w = 256
+            h = round(256 * the_h / the_w)
+        else:
+            h = 256
+            w = round(256 * the_w / the_h)
+        return the_image.Scale(w, h)
+
+    def __jpg_data_from_file(self, f_name: str) -> bytes:
+        """returns cropped jpg image as a binary data from jpg file"""
+        the_img = self.__image_from_file(f_name)
+        the_img.SetOption('quality', 50)
+        the_img.SaveFile("/tmp/tmp.jpg", wx.BITMAP_TYPE_JPEG)
+        the_data = open("/tmp/tmp.jpg", "rb").read()
+        os.remove("/tmp/tmp.jpg")
+        return the_data
 
 
     def show_image(self):
@@ -441,21 +492,7 @@ class KeywDispatcher:
             fname = self.files_list.GetString(self.files_list.GetSelection())
             the_file = os.path.join(WORKING_DIR, fname)
 
-            # downscale image to 256px and load it to preview
-            data = open(the_file, "rb").read()
-            the_image = wx.Image(io.BytesIO(data))
-            the_w = the_image.GetWidth()
-            the_h = the_image.GetHeight()
-            # print(f"size: {the_w}x{the_h}")
-            if the_w > the_h:
-                w = 256
-                h = round(256 * the_h / the_w)
-            else:
-                h = 256
-                w = round(256 * the_w / the_h)
-
-            # load image to preview
-            the_bitmap = wx.Bitmap(the_image.Scale(w, h))
+            the_bitmap = wx.Bitmap(self.__image_from_file(the_file))
             the_img_preview = wx.FindWindowById(IMAGE_PREVIEW)
             the_img_preview.SetBitmap(the_bitmap)
 
@@ -475,10 +512,63 @@ class KeywDispatcher:
                 self.__get_metadata_from_image()
             self.update_status()
 
+    def __show_keywords_count(self):
+        """count keywords in text fields and return the result"""
+        keywords = []
+        for widget in self.keyw_edits:
+            if len(widget.GetLineText(0)) > 0:
+                keywords.extend(widget.GetLineText(0).split(' '))
+        self.status_label.SetLabel(f"keywords: {len(keywords)}  ")
+
+
+    def __format_keywords(self):
+        """format keywords fields"""
+        for widget in self.keyw_edits:
+            if len(widget.GetLineText(0)) > 0:
+                widget.format_text()
+
+
+    def __rm_keywords_duplicates(self):
+        """remove duplicates in keywords fields"""
+        # make a list of lists of words from the list of strings:
+        outp_list = [widget.list_of_words() for widget in self.keyw_edits]
+        # make a list of all words:
+        allwords = [w for lst in outp_list for w in lst]
+
+        if len(allwords) != len(set(allwords)):
+            # if we have duplicates:
+            for i in range(len(outp_list)):
+                if i < 10 and len(outp_list[i]) > 0:
+                    for keyw in outp_list[i]:
+                        for other_index in range(i + 1, len(outp_list)):
+                            if keyw in outp_list[other_index]:
+                                outp_list[other_index].remove(keyw)
+
+            # update keywords fields if necessary:
+            for i in range(len(outp_list)):
+                the_str = ' '.join(outp_list[i])
+                if len(self.keyw_edits[i].GetLineText(0)) != len(the_str):
+                    self.keyw_edits[i].Clear()
+                    self.keyw_edits[i].AppendText(the_str)
+
+
+    def __spellcheck_keywords(self):
+        """spellcheck keywords fields"""
+        for widget in self.keyw_edits:
+            if len(widget.GetLineText(0)) > 0:
+                widget.spell_check()
+
+
     def update_status(self):
-        """show actual information in statusbar"""
-        status_str = self.files_list.GetString(self.files_list.GetSelection())
-        self.the_frame.StatusBar.SetStatusText(status_str)
+        """show actual information in statusbar and status label"""
+
+        self.__format_keywords()
+        self.__rm_keywords_duplicates()
+        self.__spellcheck_keywords()
+        self.__show_keywords_count()
+
+        # status_str = self.files_list.GetString(self.files_list.GetSelection())
+        # self.the_frame.StatusBar.SetStatusText(status_str)
 
     def save_data(self):
         """when we are happy with the data - write it to DB and update the image"""
@@ -490,7 +580,7 @@ class KeywDispatcher:
         self.__select_next_image()
 
     def __get_image_data_from_DB(self, the_image: str) -> bool:
-        img_data = keyw_db.get_img_data(the_image)
+        img_data = keyw_db.get_img_metadata(the_image)
         if img_data is not None:
             # isolation
             if len(img_data[1]) == 0:
@@ -519,31 +609,18 @@ class KeywDispatcher:
                     self.property_listbox.SetSelection(self.property_listbox.FindString(model))
             # text fields
             if len(img_data[4]) > 0:
+                self.title.Clear()
                 self.title.AppendText(img_data[4])
             if len(img_data[5]) > 0:
+                self.descr.Clear()
                 self.descr.AppendText(img_data[5])
-            if len(img_data[6]) > 0:
-                self.concept.AppendText(img_data[6])
-            if len(img_data[7]) > 0:
-                self.news.AppendText(img_data[7])
-            if len(img_data[8]) > 0:
-                self.actions.AppendText(img_data[8])
-            if len(img_data[9]) > 0:
-                self.emotions.AppendText(img_data[9])
-            if len(img_data[10]) > 0:
-                self.model_spec.AppendText(img_data[10])
-            if len(img_data[11]) > 0:
-                self.objects.AppendText(img_data[11])
-            if len(img_data[12]) > 0:
-                self.image_spec.AppendText(img_data[12])
-            if len(img_data[13]) > 0:
-                self.location.AppendText(img_data[13])
-            if len(img_data[14]) > 0:
-                self.composition.AppendText(img_data[14])
-            if len(img_data[15]) > 0:
-                self.wwwww.AppendText(img_data[15])
-            if len(img_data[16]) > 0:
-                self.the_rest.AppendText(img_data[16])
+
+            i = 6
+            for widget in self.keyw_edits:
+                if len(img_data[i]) > 0:
+                    widget.append_words(img_data[i])
+                i += 1
+
             return True
         else:
             return False
@@ -558,7 +635,7 @@ class KeywDispatcher:
         all_mr_pdf = glob.glob(os.path.join(RELEASE_DIR, 'Models', '*.pdf'))
         all_models = [os.path.basename(x).split('.')[0][11:] for x in all_mr_pdf if x.find(the_day) > 0]
         if len(all_models) > 0 and len(all_models_jpg) > 0:
-            models = list(set(all_models.extend(all_models_jpg)))
+            models = list(dict.fromkeys(all_models.extend(all_models_jpg)))
         elif len(all_models) == 0 and len(all_models_jpg) > 0:
             models = all_models_jpg
         elif len(all_models) > 0 and len(all_models_jpg) == 0:
@@ -575,7 +652,7 @@ class KeywDispatcher:
         all_mr_pdf = glob.glob(os.path.join(RELEASE_DIR, 'Properties', '*.pdf'))
         all_owners = [os.path.basename(x).split('.')[0][11:] for x in all_mr_pdf if x.find(the_day) > 0]
         if len(all_owners) > 0 and len(all_owners_jpg) > 0:
-            owners = list(set(all_owners.extend(all_owners_jpg)))
+            owners = list(dict.fromkeys(all_owners.extend(all_owners_jpg)))
         elif len(all_owners) == 0 and len(all_owners_jpg) > 0:
             owners = all_owners_jpg
         elif len(all_owners) > 0 and len(all_owners_jpg) == 0:
@@ -626,33 +703,27 @@ class KeywDispatcher:
 
     def __write_to_db(self):
         """insert actual data to database"""
-        keyw_db.insert_image_data(self.__jpg_data(),
-                                  self.files_list.GetString(self.files_list.GetSelection()),
-                                  self.isolation.GetLineText(0),
-                                  self.__get_models_str(),
-                                  self.__get_property_str(),
-                                  self.title.GetLineText(0),
-                                  self.descr.GetLineText(0),
-                                  self.concept.GetLineText(0),
-                                  self.news.GetLineText(0),
-                                  self.actions.GetLineText(0),
-                                  self.emotions.GetLineText(0),
-                                  self.model_spec.GetLineText(0),
-                                  self.objects.GetLineText(0),
-                                  self.image_spec.GetLineText(0),
-                                  self.location.GetLineText(0),
-                                  self.composition.GetLineText(0),
-                                  self.wwwww.GetLineText(0),
-                                  self.the_rest.GetLineText(0))
-
-    def __jpg_data(self):
-        """return bitmap as jpg binary data"""
-        the_img = self.img_preview.GetBitmap().ConvertToImage()
-        the_img.SetOption('quality', 50)
-        the_img.SaveFile("/tmp/tmp.jpg", wx.BITMAP_TYPE_JPEG)
-        the_data = open("/tmp/tmp.jpg", "rb").read()
-        os.remove("/tmp/tmp.jpg")
-        return the_data
+        if self.files_list.GetSelection() > -1:
+            fname = self.files_list.GetString(self.files_list.GetSelection())
+            the_file = os.path.join(WORKING_DIR, fname)
+            keyw_db.insert_image_data(self.__jpg_data_from_file(the_file),
+                                      self.files_list.GetString(self.files_list.GetSelection()),
+                                      self.isolation.GetLineText(0),
+                                      self.__get_models_str(),
+                                      self.__get_property_str(),
+                                      self.title.GetLineText(0),
+                                      self.descr.GetLineText(0),
+                                      self.concept.GetLineText(0),
+                                      self.news.GetLineText(0),
+                                      self.actions.GetLineText(0),
+                                      self.emotions.GetLineText(0),
+                                      self.model_spec.GetLineText(0),
+                                      self.objects.GetLineText(0),
+                                      self.image_spec.GetLineText(0),
+                                      self.location.GetLineText(0),
+                                      self.composition.GetLineText(0),
+                                      self.wwwww.GetLineText(0),
+                                      self.the_rest.GetLineText(0))
 
     def __get_models_str(self):
         """get models list as a string"""
@@ -688,40 +759,26 @@ class KeywDispatcher:
 
     def populate_text_fields_using_search_results(self):
         if self.search_results.GetSelectedItemCount() > 0:
-            selected_files = []
+            selected_files_list = []
             item = self.search_results.GetFirstSelected()
             while item != -1:
                 data = self.search_results.GetItem(item)
-                selected_files.append(data.Text)
+                selected_files_list.append(data.Text)
                 item = self.search_results.GetNextSelected(item)
 
-            imgs_data = keyw_db.get_imgs_data(selected_files)
-            if len(imgs_data[6]) > 0:
-                self.concept.AppendText(imgs_data[6])
-            if len(imgs_data[7]) > 0:
-                self.news.AppendText(imgs_data[7])
-            if len(imgs_data[8]) > 0:
-                self.actions.AppendText(imgs_data[8])
-            if len(imgs_data[9]) > 0:
-                self.emotions.AppendText(imgs_data[9])
-            if len(imgs_data[10]) > 0:
-                self.model_spec.AppendText(imgs_data[10])
-            if len(imgs_data[11]) > 0:
-                self.objects.AppendText(imgs_data[11])
-            if len(imgs_data[12]) > 0:
-                self.image_spec.AppendText(imgs_data[12])
-            if len(imgs_data[13]) > 0:
-                self.location.AppendText(imgs_data[13])
-            if len(imgs_data[14]) > 0:
-                self.composition.AppendText(imgs_data[14])
-            if len(imgs_data[15]) > 0:
-                self.wwwww.AppendText(imgs_data[15])
-            if len(imgs_data[16]) > 0:
-                self.the_rest.AppendText(imgs_data[16])
+            imgs_data = keyw_db.get_imgs_metadata(selected_files_list)
+
+            i = 6
+            for widget in self.keyw_edits:
+                if len(imgs_data[i]) > 0:
+                    # print(i, imgs_data[i])
+                    widget.append_words(imgs_data[i])
+                i += 1
+
+            self.__format_keywords()
+            self.__rm_keywords_duplicates()
+            self.__spellcheck_keywords()
+            self.__show_keywords_count()
 
             self.main_notebook.ChangeSelection(0)
-
-
-
-
 
