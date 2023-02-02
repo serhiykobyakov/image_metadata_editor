@@ -62,10 +62,11 @@ class KeywTextCtrl(wx.TextCtrl):
             event.Skip()
         elif key_code == 13:
             # on Enter: format text line
-            event = DataReadyEvent(self.GetId())
-            self.GetEventHandler().ProcessEvent(event)
             self.format_text()
             self.spell_check()
+            # send event: the keywords are ready to check
+            event = DataReadyEvent(self.GetId())
+            self.GetEventHandler().ProcessEvent(event)
             # event.Skip() <- comment it to avoid GTK problems
         elif self.valid_char(key_code):
             self.need_spell_check_while_type = True
@@ -95,7 +96,7 @@ class KeywTextCtrl(wx.TextCtrl):
             self.need_spell_check_while_type = False
 
     def format_text(self):
-        """remove unnecessary spaces"""
+        """remove unnecessary spaces and then remove duplicates"""
         if len(self.GetLineText(0)) > 0:
             the_line = self.GetLineText(0).replace('  ', ' ').replace('  ', ' ').strip()
             keywords = list(dict.fromkeys(the_line.split(' ')))
@@ -126,4 +127,5 @@ class KeywTextCtrl(wx.TextCtrl):
             self.AppendText(the_line.strip())
 
     def list_of_words(self) -> list:
+        """return a list of words"""
         return self.GetLineText(0).split(" ")
